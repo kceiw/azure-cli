@@ -14,6 +14,7 @@ from azure.mgmt.sql.models import (
     ElasticPoolPerDatabaseSettings,
     ImportExtensionRequest,
     ExportRequest,
+    InstancePool,
     ManagedDatabase,
     ManagedInstance,
     ManagedInstanceAdministrator,
@@ -852,6 +853,91 @@ def load_arguments(self, _):
                    arg_type=get_enum_type(TransparentDataEncryptionStatus))
 
     ###############################################
+    #                sql db ltr                   #
+    ###############################################
+    with self.argument_context('sql db ltr-policy set') as c:
+        create_args_for_complex_type(
+            c, 'parameters', Database, [
+                'weekly_retention',
+                'monthly_retention',
+                'yearly_retention',
+                'week_of_year'])
+
+        c.argument('weekly_retention',
+                   help='Retention for the weekly backup. '
+                   'If just a number is passed instead of an ISO 8601 string, days will be assumed as the units.'
+                   'There is a minimum of 7 days and a maximum of 10 years.')
+
+        c.argument('monthly_retention',
+                   help='Retention for the monthly backup. '
+                   'If just a number is passed instead of an ISO 8601 string, days will be assumed as the units.'
+                   'There is a minimum of 7 days and a maximum of 10 years.')
+
+        c.argument('yearly_retention',
+                   help='Retention for the yearly backup. '
+                   'If just a number is passed instead of an ISO 8601 string, days will be assumed as the units.'
+                   'There is a minimum of 7 days and a maximum of 10 years.')
+
+        c.argument('week_of_year',
+                   help='The Week of Year, 1 to 52, in which to take the yearly LTR backup.')
+
+    with self.argument_context('sql db ltr-backup') as c:
+        c.argument('location_name',
+                   required=True,
+                   arg_type=get_location_type(self.cli_ctx),
+                   help='The location of the desired backups.')
+
+        c.argument('backup_name',
+                   options_list=['--name', '-n'],
+                   help='The name of the LTR backup. '
+                   'Use \'az sql db ltr-backup show\' or \'az sql db ltr-backup list\' for backup name.')
+
+        c.argument('long_term_retention_server_name',
+                   options_list=['--server', '-s'],
+                   help='Name of the Azure SQL Server. '
+                   'If specified, retrieves all requested backups under this server.')
+
+        c.argument('long_term_retention_database_name',
+                   options_list=['--database', '-d'],
+                   help='Name of the Azure SQL Database. '
+                   'If specified (along with server name), retrieves all requested backups under this database.')
+
+    with self.argument_context('sql db ltr-backup list') as c:
+        c.argument('database_state',
+                   required=False,
+                   options_list=['--database-state', '--state'],
+                   help='\'All\', \'Live\', or \'Deleted\'. '
+                   'Will fetch backups only from databases of specified state. '
+                   'If no state provied, defaults to \'All\'.')
+
+        c.argument('only_latest_per_database',
+                   options_list=['--only-latest-per-database', '--latest'],
+                   required=False,
+                   help='If true, will only return the latest backup for each database')
+
+    with self.argument_context('sql db ltr-backup restore') as c:
+        c.argument('target_database_name',
+                   options_list=['--dest-database'],
+                   required=True,
+                   help='Name of the database that will be created as the restore destination.')
+
+        c.argument('target_server_name',
+                   options_list=['--dest-server'],
+                   required=True,
+                   help='Name of the server to restore database to.')
+
+        c.argument('target_resource_group_name',
+                   options_list=['--dest-resource-group'],
+                   required=True,
+                   help='Name of the resource group of the server to restore database to.')
+
+        c.argument('long_term_retention_backup_resource_id',
+                   options_list=['--backup-id'],
+                   required=True,
+                   help='The resource id of the long term retention backup to be restored. '
+                   'Use \'az sql db ltr-backup show\' or \'az sql db ltr-backup list\' for backup id.')
+
+    ###############################################
     #                sql dw                       #
     ###############################################
     with self.argument_context('sql dw') as c:
@@ -1042,6 +1128,69 @@ def load_arguments(self, _):
                    help='List of databases to remove from Failover Group')
         c.argument('allow_data_loss',
                    arg_type=allow_data_loss_param_type)
+
+    ###############################################
+    #             sql instance pool               #
+    ###############################################
+
+    with self.argument_context('sql instance-pool') as c:
+        c.argument('instance_pool_name',
+                   options_list=['--name', '-n'],
+                   help="Instance Pool Name")
+
+        c.argument(
+            'tier',
+            arg_type=tier_param_type,
+            required=True,
+            help='The edition component of the sku. Allowed value: GeneralPurpose.')
+
+        c.argument('family',
+                   arg_type=family_param_type,
+                   required=True,
+                   help='The compute generation component of the sku. '
+                   'Allowed value: Gen5')
+
+        c.argument('license_type',
+                   arg_type=get_enum_type(DatabaseLicenseType),
+                   help='The license type to apply for this instance pool.')
+
+    with self.argument_context('sql instance-pool create') as c:
+        # Create args that will be used to build up the InstancePool object
+        create_args_for_complex_type(
+            c, 'parameters', InstancePool, [
+                'location',
+                'license_type',
+                'subnet_id',
+                'vcores',
+                'tags'
+            ])
+
+        c.argument('vcores',
+                   required=True,
+                   arg_type=capacity_param_type,
+                   help='Capacity of the instance pool in vcores.')
+
+        c.argument(
+            'subnet_id',
+            options_list=['--subnet'],
+            required=True,
+            help='Name or ID of the subnet that allows access to an Instance Pool. '
+                 'If subnet name is provided, --vnet-name must be provided.')
+
+        # Create args that will be used to build up the Instance Pool's Sku object
+        create_args_for_complex_type(
+            c, 'sku', Sku, [
+                'family',
+                'name',
+                'tier',
+            ])
+
+        c.ignore('name')  # Hide sku name
+
+        c.extra('vnet_name',
+                options_list=['--vnet-name'],
+                help='The virtual network name',
+                validator=validate_subnet)
 
     ###############################################
     #                sql server                   #

@@ -28,7 +28,7 @@ from azure.cli.command_modules.network._client_factory import (
     cf_express_route_ports, cf_express_route_port_locations, cf_express_route_links, cf_app_gateway_waf_policy,
     cf_service_tags, cf_private_link_services, cf_private_endpoint_types, cf_peer_express_route_circuit_connections,
     cf_virtual_router, cf_virtual_router_peering, cf_service_aliases, cf_bastion_hosts, cf_flow_logs,
-    cf_private_dns_zone_groups, cf_security_partner_providers)
+    cf_private_dns_zone_groups, cf_security_partner_providers, cf_load_balancer_backend_pools)
 from azure.cli.command_modules.network._util import (
     list_network_resource_property, get_network_resource_property_entry, delete_network_resource_property_entry)
 from azure.cli.command_modules.network._format import (
@@ -201,6 +201,12 @@ def load_command_table(self, _):
     network_lb_sdk = CliCommandType(
         operations_tmpl='azure.mgmt.network.operations#LoadBalancersOperations.{}',
         client_factory=cf_load_balancers
+    )
+
+    network_lb_backend_pool_sdk = CliCommandType(
+        operations_tmpl='azure.mgmt.network.operations#LoadBalancerBackendAddressPoolsOperations.{}',
+        client_factory=cf_load_balancer_backend_pools,
+        min_api='2020-04-01'
     )
 
     network_lgw_sdk = CliCommandType(
@@ -626,7 +632,7 @@ def load_command_table(self, _):
         g.show_command('show', 'get')
         g.command('get-stats', 'get_stats')
         g.command('list-arp-tables', 'list_arp_table')
-        g.command('list-route-tables', 'list_routes_table')
+        g.custom_command('list-route-tables', 'list_express_route_route_tables')
         g.custom_command('create', 'create_express_route', supports_no_wait=True)
         g.custom_command('list', 'list_express_route_circuits')
         g.command('list-service-providers', 'list', command_type=network_ersp_sdk)
@@ -751,7 +757,6 @@ def load_command_table(self, _):
         'frontend_ip_configurations': 'frontend-ip',
         'inbound_nat_rules': 'inbound-nat-rule',
         'inbound_nat_pools': 'inbound-nat-pool',
-        'backend_address_pools': 'address-pool',
         'load_balancing_rules': 'rule',
         'probes': 'probe',
     }
@@ -777,8 +782,24 @@ def load_command_table(self, _):
         g.generic_update_command('update', child_collection_prop_name='inbound_nat_pools',
                                  custom_func_name='set_lb_inbound_nat_pool')
 
-    with self.command_group('network lb address-pool', network_lb_sdk) as g:
+    with self.command_group('network lb address-pool', network_lb_backend_pool_sdk) as g:
         g.custom_command('create', 'create_lb_backend_address_pool')
+        g.show_command('show', 'get')
+        g.command('list', 'list')
+        g.custom_command('delete', 'delete_lb_backend_address_pool')
+
+    with self.command_group('network lb address-pool', network_lb_sdk, max_api='2020-03-01') as g:
+        g.custom_command('create', 'create_lb_backend_address_pool')
+
+    with self.command_group('network lb address-pool', network_util, max_api='2020-03-01') as g:
+        g.command('list', list_network_resource_property('load_balancers', 'backend_address_pools'))
+        g.show_command('show', get_network_resource_property_entry('load_balancers', 'backend_address_pools'))
+        g.command('delete', delete_network_resource_property_entry('load_balancers', 'backend_address_pools'))
+
+    with self.command_group('network lb address-pool address', network_lb_backend_pool_sdk, is_preview=True) as g:
+        g.custom_command('add', 'add_lb_backend_address_pool_address')
+        g.custom_command('remove', 'remove_lb_backend_address_pool_address')
+        g.custom_command('list', 'list_lb_backend_address_pool_address')
 
     with self.command_group('network lb rule', network_lb_sdk) as g:
         g.custom_command('create', 'create_lb_rule')
@@ -1187,4 +1208,15 @@ def load_command_table(self, _):
         g.show_command('show', 'get')
         g.custom_command('list', 'list_security_partner_provider')
         g.command('delete', 'delete')
+
+    # region PrivateLinkResource and PrivateEndpointConnection
+    plr_and_pec_custom = CliCommandType(operations_tmpl='azure.cli.command_modules.network.private_link_resource_and_endpoint_connections.custom#{}')
+    with self.command_group('network private-link-resource', custom_command_type=plr_and_pec_custom) as g:
+        g.custom_show_command('list', 'list_private_link_resource')
+    with self.command_group('network private-endpoint-connection', custom_command_type=plr_and_pec_custom) as g:
+        g.custom_command('approve', 'approve_private_endpoint_connection')
+        g.custom_command('reject', 'reject_private_endpoint_connection')
+        g.custom_command('delete', 'remove_private_endpoint_connection', confirmation=True)
+        g.custom_show_command('show', 'show_private_endpoint_connection')
+        g.custom_command('list', 'list_private_endpoint_connection')
     # endregion

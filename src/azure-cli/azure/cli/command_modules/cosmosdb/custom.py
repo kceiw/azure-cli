@@ -8,6 +8,7 @@
 from enum import Enum
 from knack.log import get_logger
 from knack.util import CLIError
+from msrestazure.azure_exceptions import CloudError
 
 from azure.mgmt.cosmosdb.models import (
     ConsistencyPolicy,
@@ -87,7 +88,8 @@ def cli_cosmosdb_create(cmd, client,
                         virtual_network_rules=None,
                         enable_multiple_write_locations=None,
                         disable_key_based_metadata_write_access=None,
-                        key_uri=None):
+                        key_uri=None,
+                        enable_public_network=None):
     """Create a new Azure Cosmos DB database account."""
     consistency_policy = None
     if default_consistency_level is not None:
@@ -106,6 +108,10 @@ def cli_cosmosdb_create(cmd, client,
         locations = []
         locations.append(Location(location_name=resource_group_location, failover_priority=0, is_zone_redundant=False))
 
+    public_network_access = None
+    if enable_public_network is not None:
+        public_network_access = 'Enabled' if enable_public_network else 'Disabled'
+
     params = DatabaseAccountCreateUpdateParameters(
         location=resource_group_location,
         locations=locations,
@@ -119,7 +125,8 @@ def cli_cosmosdb_create(cmd, client,
         virtual_network_rules=virtual_network_rules,
         enable_multiple_write_locations=enable_multiple_write_locations,
         disable_key_based_metadata_write_access=disable_key_based_metadata_write_access,
-        key_vault_key_uri=key_uri)
+        key_vault_key_uri=key_uri,
+        public_network_access=public_network_access)
 
     async_docdb_create = client.create_or_update(resource_group_name, account_name, params)
     docdb_account = async_docdb_create.result()
@@ -142,7 +149,8 @@ def cli_cosmosdb_update(client,
                         enable_virtual_network=None,
                         virtual_network_rules=None,
                         enable_multiple_write_locations=None,
-                        disable_key_based_metadata_write_access=None):
+                        disable_key_based_metadata_write_access=None,
+                        enable_public_network=None):
     """Update an existing Azure Cosmos DB database account. """
     existing = client.get(resource_group_name, account_name)
 
@@ -167,6 +175,10 @@ def cli_cosmosdb_update(client,
                                                max_staleness_prefix=max_staleness_prefix,
                                                max_interval_in_seconds=max_interval)
 
+    public_network_access = None
+    if enable_public_network is not None:
+        public_network_access = 'Enabled' if enable_public_network else 'Disabled'
+
     params = DatabaseAccountUpdateParameters(
         locations=locations,
         tags=tags,
@@ -177,7 +189,8 @@ def cli_cosmosdb_update(client,
         capabilities=capabilities,
         virtual_network_rules=virtual_network_rules,
         enable_multiple_write_locations=enable_multiple_write_locations,
-        disable_key_based_metadata_write_access=disable_key_based_metadata_write_access)
+        disable_key_based_metadata_write_access=disable_key_based_metadata_write_access,
+        public_network_access=public_network_access)
 
     async_docdb_update = client.update(resource_group_name, account_name, params)
     docdb_account = async_docdb_update.result()
@@ -204,6 +217,12 @@ def cli_cosmosdb_keys(client, resource_group_name, account_name, key_type=Cosmos
     raise CLIError("az cosmosdb keys list: '{0}' is not a valid value for '--type'. See 'az cosmosdb keys list --help'.".format(key_type))
 
 
+def _handle_exists_exception(cloud_error):
+    if cloud_error.status_code == 404:
+        return False
+    raise cloud_error
+
+
 def cli_cosmosdb_sql_database_create(client,
                                      resource_group_name,
                                      account_name,
@@ -222,6 +241,19 @@ def cli_cosmosdb_sql_database_create(client,
                                              account_name,
                                              database_name,
                                              sql_database_resource)
+
+
+def cli_cosmosdb_sql_database_exists(client,
+                                     resource_group_name,
+                                     account_name,
+                                     database_name):
+    """Checks if an Azure Cosmos DB SQL database exists"""
+    try:
+        client.get_sql_database(resource_group_name, account_name, database_name)
+    except CloudError as ex:
+        return _handle_exists_exception(ex)
+
+    return True
 
 
 def _populate_sql_container_definition(sql_container_resource,
@@ -326,6 +358,20 @@ def cli_cosmosdb_sql_container_update(client,
                                               database_name,
                                               container_name,
                                               sql_container_create_update_resource)
+
+
+def cli_cosmosdb_sql_container_exists(client,
+                                      resource_group_name,
+                                      account_name,
+                                      database_name,
+                                      container_name):
+    """Checks if an Azure Cosmos DB SQL container exists"""
+    try:
+        client.get_sql_container(resource_group_name, account_name, database_name, container_name)
+    except CloudError as ex:
+        return _handle_exists_exception(ex)
+
+    return True
 
 
 def cli_cosmosdb_sql_stored_procedure_create_update(client,
@@ -487,6 +533,19 @@ def cli_cosmosdb_gremlin_database_create(client,
                                                  gremlin_database_resource)
 
 
+def cli_cosmosdb_gremlin_database_exists(client,
+                                         resource_group_name,
+                                         account_name,
+                                         database_name):
+    """Checks if an Azure Cosmos DB Gremlin database exists"""
+    try:
+        client.get_gremlin_database(resource_group_name, account_name, database_name)
+    except CloudError as ex:
+        return _handle_exists_exception(ex)
+
+    return True
+
+
 def _populate_gremlin_graph_definition(gremlin_graph_resource,
                                        partition_key_path,
                                        default_ttl,
@@ -583,6 +642,20 @@ def cli_cosmosdb_gremlin_graph_update(client,
                                               gremlin_graph_create_update_resource)
 
 
+def cli_cosmosdb_gremlin_graph_exists(client,
+                                      resource_group_name,
+                                      account_name,
+                                      database_name,
+                                      graph_name):
+    """Checks if an Azure Cosmos DB Gremlin graph exists"""
+    try:
+        client.get_gremlin_graph(resource_group_name, account_name, database_name, graph_name)
+    except CloudError as ex:
+        return _handle_exists_exception(ex)
+
+    return True
+
+
 def cli_cosmosdb_mongodb_database_create(client,
                                          resource_group_name,
                                          account_name,
@@ -603,6 +676,19 @@ def cli_cosmosdb_mongodb_database_create(client,
                                                   mongodb_database_resource)
 
 
+def cli_cosmosdb_mongodb_database_exists(client,
+                                         resource_group_name,
+                                         account_name,
+                                         database_name):
+    """Checks if an Azure Cosmos DB MongoDB database exists"""
+    try:
+        client.get_mongo_db_database(resource_group_name, account_name, database_name)
+    except CloudError as ex:
+        return _handle_exists_exception(ex)
+
+    return True
+
+
 def _populate_mongodb_collection_definition(mongodb_collection_resource, shard_key_path, indexes):
     if all(arg is None for arg in [shard_key_path, indexes]):
         return False
@@ -621,7 +707,7 @@ def cli_cosmosdb_mongodb_collection_create(client,
                                            account_name,
                                            database_name,
                                            collection_name,
-                                           shard_key_path,
+                                           shard_key_path=None,
                                            indexes=None,
                                            throughput=None):
     """Create an Azure Cosmos DB MongoDB collection"""
@@ -675,6 +761,20 @@ def cli_cosmosdb_mongodb_collection_update(client,
                                                     mongodb_collection_create_update_resource)
 
 
+def cli_cosmosdb_mongodb_collection_exists(client,
+                                           resource_group_name,
+                                           account_name,
+                                           database_name,
+                                           collection_name):
+    """Checks if an Azure Cosmos DB MongoDB collection exists"""
+    try:
+        client.get_mongo_db_collection(resource_group_name, account_name, database_name, collection_name)
+    except CloudError as ex:
+        return _handle_exists_exception(ex)
+
+    return True
+
+
 def cli_cosmosdb_cassandra_keyspace_create(client,
                                            resource_group_name,
                                            account_name,
@@ -693,6 +793,19 @@ def cli_cosmosdb_cassandra_keyspace_create(client,
                                                    account_name,
                                                    keyspace_name,
                                                    cassandra_keyspace_resource)
+
+
+def cli_cosmosdb_cassandra_keyspace_exists(client,
+                                           resource_group_name,
+                                           account_name,
+                                           keyspace_name):
+    """Checks if an Azure Cosmos DB Cassandra keyspace exists"""
+    try:
+        client.get_cassandra_keyspace(resource_group_name, account_name, keyspace_name)
+    except CloudError as ex:
+        return _handle_exists_exception(ex)
+
+    return True
 
 
 def _populate_cassandra_table_definition(cassandra_table_resource, default_ttl, schema):
@@ -765,6 +878,20 @@ def cli_cosmosdb_cassandra_table_update(client,
                                                 cassandra_table_create_update_resource)
 
 
+def cli_cosmosdb_cassandra_table_exists(client,
+                                        resource_group_name,
+                                        account_name,
+                                        keyspace_name,
+                                        table_name):
+    """Checks if an Azure Cosmos DB Cassandra table exists"""
+    try:
+        client.get_cassandra_table(resource_group_name, account_name, keyspace_name, table_name)
+    except CloudError as ex:
+        return _handle_exists_exception(ex)
+
+    return True
+
+
 def cli_cosmosdb_table_create(client,
                               resource_group_name,
                               account_name,
@@ -780,6 +907,19 @@ def cli_cosmosdb_table_create(client,
         options=options)
 
     return client.create_update_table(resource_group_name, account_name, table_name, table)
+
+
+def cli_cosmosdb_table_exists(client,
+                              resource_group_name,
+                              account_name,
+                              table_name):
+    """Checks if an Azure Cosmos DB table exists"""
+    try:
+        client.get_table(resource_group_name, account_name, table_name)
+    except CloudError as ex:
+        return _handle_exists_exception(ex)
+
+    return True
 
 
 def cli_cosmosdb_sql_database_throughput_update(client, resource_group_name, account_name, database_name, throughput):
@@ -1003,7 +1143,8 @@ def _update_private_endpoint_connection_status(client, resource_group_name, acco
     return client.create_or_update(resource_group_name=resource_group_name,
                                    account_name=account_name,
                                    private_endpoint_connection_name=private_endpoint_connection_name,
-                                   private_link_service_connection_state=private_endpoint_connection.private_link_service_connection_state)
+                                   private_link_service_connection_state=private_endpoint_connection.private_link_service_connection_state,
+                                   parameters=private_endpoint_connection)
 
 
 def approve_private_endpoint_connection(client, resource_group_name, account_name, private_endpoint_connection_name,
