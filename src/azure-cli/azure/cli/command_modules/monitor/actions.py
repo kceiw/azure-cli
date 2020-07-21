@@ -35,11 +35,11 @@ def timezone_offset_type(value):
     if hour > 14 or hour < -12:
         raise CLIError('Offset out of range: -12 to +14')
 
-    if hour >= 0 and hour < 10:
+    if 0 <= hour < 10:
         value = '+0{}'.format(hour)
     elif hour >= 10:
         value = '+{}'.format(hour)
-    elif hour < 0 and hour > -10:
+    elif -10 < hour < 0:
         value = '-0{}'.format(-1 * hour)
     else:
         value = str(hour)
@@ -126,7 +126,7 @@ class MetricAlertAddAction(argparse._AppendAction):
         from azure.mgmt.monitor.models import MetricAlertAction
         action = MetricAlertAction(
             action_group_id=values[0],
-            webhook_properties=dict(x.split('=', 1) for x in values[1:]) if len(values) > 1 else None
+            web_hook_properties=dict(x.split('=', 1) for x in values[1:]) if len(values) > 1 else None
         )
         action.odatatype = 'Microsoft.WindowsAzure.Management.Monitoring.Alerts.Models.Microsoft.AppInsights.Nexus.' \
                            'DataContracts.Resources.ScheduledQueryRules.Action'
